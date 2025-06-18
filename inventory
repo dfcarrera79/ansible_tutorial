@@ -1,2 +1,6 @@
+[web_servers]
 loxaserver@192.168.50.41
+
+[db_servers]
+loxaservernew@192.168.50.82
 
