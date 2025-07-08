@@ -4,3 +4,9 @@ loxaserver@192.168.50.41
 [db_servers]
 loxaservernew@192.168.50.82
 
+[workstations]
+localhost ansible_connection=local
+
+[gcp_server]
+#dfcarrera1979@34.44.224.232
+34.44.224.232 ansible_user=dfcarrera1979 ansible_ssh_private_key_file=~/.ssh/ansible_key ansible_become=true

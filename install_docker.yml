@@ -1,0 +1,23 @@
+---
+
+- hosts: gcp_server
+  become: true
+  tasks:
+
+    - name: Instalar Docker y Docker Compose
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+
+    - name: Habilitar el servicio de Docker al inicio
+      systemd:
+        name: docker
+        enabled: yes
+
+    - name: Iniciar el servicio de Docker
+      systemd:
+        name: docker
+        state: started
+
