@@ -2,7 +2,17 @@
 
 - hosts: gcp_server
   become: true
+  vars:
+    nginx_container_name: quasar-nginx
+    nginx_volume_path: /home/{{ ansible_user }}/quasar-deploy
+
   tasks:
+
+    - name: Instalar actualizaciones del sistema (Ubuntu)
+      apt:
+        upgrade: dist
+        update_cache: yes
+      tags: always
 
     - name: Instalar Docker y Docker Compose
       apt:
@@ -21,3 +31,25 @@
         name: docker
         state: started
 
+    - name: Crear directorio para desplegar la app Quasar
+      file:
+        path: "{{ nginx_volume_path }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+
+    - name: Crear contenedor Nginx para servir el frontend
+      docker_container:
+        name: "{{ nginx_container_name }}"
+        image: nginx:latest
+        state: started
+        restart_policy: always
+        ports:
+          - "80:80"
+        volumes:
+          - "{{ nginx_volume_path }}:/usr/share/nginx/html:ro"
+
+    - name: Asegurar que el contenedor Nginx se reinicie si cambia el contenido
+      command: docker restart "{{ nginx_container_name }}"
+      when: nginx_container_name is defined
