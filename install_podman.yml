@@ -1,6 +1,6 @@
 ---
 
-- hosts: gcp_server
+- hosts: db_servers
   become: true
   vars:
     ansible_user: ubuntu

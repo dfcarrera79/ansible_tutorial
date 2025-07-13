@@ -7,6 +7,10 @@ loxaservernew@192.168.50.82
 [workstations]
 localhost ansible_connection=local
 
+#[gcp_server]
+#dfcarrera1979@34.27.96.125
+#34.27.96.125 ansible_user=dfcarrera1979 ansible_ssh_private_key_file=~/.ssh/#ansible ansible_become=true
+
 [gcp_server]
-#dfcarrera1979@34.70.167.151
-34.70.167.151 ansible_user=dfcarrera1979 ansible_ssh_private_key_file=~/.ssh/ansible ansible_become=true
+#dfcarrera1979@34.27.96.125
+34.27.96.125 ansible_user=ubuntu ansible_ssh_private_key_file=~/.ssh/ansible ansible_become=true

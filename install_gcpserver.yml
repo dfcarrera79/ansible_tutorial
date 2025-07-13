@@ -1,0 +1,237 @@
+---
+
+- hosts: gcp_server
+  become: true
+  vars:
+    ansible_user: ubuntu
+    # Configuración para aplicación RecargasApp
+    app_name: recargasapp
+    base_deploy_path: /home/{{ ansible_user }}/{{ app_name }}
+    frontend_deploy_path: "{{ base_deploy_path }}/frontend"
+    backend_deploy_path: "{{ base_deploy_path }}/backend"
+    # Configuración de contenedores
+    frontend_container_name: "{{ app_name }}-frontend"
+    backend_container_name: "{{ app_name }}-backend"
+    # Puertos
+    frontend_port: 8080
+    backend_port: 8000
+    # Configuración de red Docker
+    docker_network_name: "{{ app_name }}-network"
+    
+  tasks:
+    - name: Actualizar el sistema
+      apt:
+        upgrade: dist
+        update_cache: yes
+      tags: always
+    
+    - name: Instalar Docker y Docker Compose
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+    
+    - name: Habilitar Docker al iniciar el sistema
+      systemd:
+        name: docker
+        enabled: yes
+    
+    - name: Iniciar el servicio Docker
+      systemd:
+        name: docker
+        state: started
+    
+    - name: Agregar usuario al grupo docker
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+    
+    - name: Instalar UFW (Uncomplicated Firewall)
+      apt:
+        name: ufw
+        state: present
+        update_cache: yes
+    
+    - name: Permitir puerto HTTP (80)
+      ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+    
+    - name: Permitir puerto HTTPS (443)
+      ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+    
+    - name: Permitir puerto para Frontend (8080)
+      ufw:
+        rule: allow
+        port: "{{ frontend_port }}"
+        proto: tcp
+    
+    - name: Permitir puerto para Backend (8000)
+      ufw:
+        rule: allow
+        port: "{{ backend_port }}"
+        proto: tcp
+    
+    - name: Permitir SSH (22)
+      ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+    
+    - name: Habilitar UFW si no está activo
+      ufw:
+        state: enabled
+        policy: deny
+    
+    - name: Crear directorio base para la aplicación
+      file:
+        path: "{{ base_deploy_path }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+    
+    - name: Crear directorio para Frontend
+      file:
+        path: "{{ frontend_deploy_path }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+    
+    - name: Crear directorio para Backend
+      file:
+        path: "{{ backend_deploy_path }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+    
+    - name: Crear directorio para logs
+      file:
+        path: "{{ base_deploy_path }}/logs"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+    
+    - name: Crear directorio para backups
+      file:
+        path: "{{ base_deploy_path }}/backups"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0755'
+    
+    # - name: Instalar herramientas adicionales
+    #   apt:
+    #     name:
+    #       - curl
+    #       - wget
+    #       - htop
+    #       - git
+    #       - jq
+    #       - tree
+    #       - net-tools
+    #     state: present
+    
+    # - name: Crear script de monitoreo
+    #   copy:
+    #     dest: "{{ base_deploy_path }}/monitor.sh"
+    #     owner: "{{ ansible_user }}"
+    #     group: "{{ ansible_user }}"
+    #     mode: '0755'
+    #     content: |
+    #       #!/bin/bash
+    #       echo "=== RecargasApp Status ==="
+    #       echo "Frontend Container:"
+    #       docker ps --filter "name={{ frontend_container_name }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    #       echo ""
+    #       echo "Backend Container:"
+    #       docker ps --filter "name={{ backend_container_name }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    #       echo ""
+    #       echo "Network:"
+    #       docker network ls --filter "name={{ docker_network_name }}"
+    #       echo ""
+    #       echo "System Resources:"
+    #       echo "Memory: $(free -h | grep Mem | awk '{print $3 "/" $2}')"
+    #       echo "Disk: $(df -h / | tail -1 | awk '{print $3 "/" $2 " (" $5 " used)"}')"
+    
+    # - name: Crear script de limpieza
+    #   copy:
+    #     dest: "{{ base_deploy_path }}/cleanup.sh"
+    #     owner: "{{ ansible_user }}"
+    #     group: "{{ ansible_user }}"
+    #     mode: '0755'
+    #     content: |
+    #       #!/bin/bash
+    #       echo "Limpiando contenedores parados..."
+    #       docker container prune -f
+    #       echo "Limpiando imágenes sin usar..."
+    #       docker image prune -f
+    #       echo "Limpiando volúmenes sin usar..."
+    #       docker volume prune -f
+    #       echo "Limpieza completada."
+    
+    # - name: Crear docker-compose.yml template
+    #   copy:
+    #     dest: "{{ base_deploy_path }}/docker-compose.yml"
+    #     owner: "{{ ansible_user }}"
+    #     group: "{{ ansible_user }}"
+    #     mode: '0644'
+    #     content: |
+    #       version: '3.8'
+          
+    #       services:
+    #         frontend:
+    #           container_name: {{ frontend_container_name }}
+    #           image: {{ frontend_container_name }}:latest
+    #           ports:
+    #             - "{{ frontend_port }}:80"
+    #           networks:
+    #             - {{ docker_network_name }}
+    #           restart: unless-stopped
+    #           environment:
+    #             - NODE_ENV=production
+    #             - BACKEND_URL=http://{{ backend_container_name }}:{{ backend_port }}
+    #           depends_on:
+    #             - backend
+          
+    #         backend:
+    #           container_name: {{ backend_container_name }}
+    #           image: {{ backend_container_name }}:latest
+    #           ports:
+    #             - "{{ backend_port }}:8000"
+    #           networks:
+    #             - {{ docker_network_name }}
+    #           restart: unless-stopped
+    #           environment:
+    #             - ENVIRONMENT=production
+    #             - FRONTEND_URL=http://{{ frontend_container_name }}:80
+    #           volumes:
+    #             - ./logs:/app/logs
+          
+    #       networks:
+    #         {{ docker_network_name }}:
+    #           external: true
+    
+    # - name: Mostrar información de configuración
+    #   debug:
+    #     msg:
+    #       - "=== Configuración de RecargasApp ==="
+    #       - "Directorio base: {{ base_deploy_path }}"
+    #       - "Frontend: {{ frontend_deploy_path }} (Puerto: {{ frontend_port }})"
+    #       - "Backend: {{ backend_deploy_path }} (Puerto: {{ backend_port }})"
+    #       - "Red Docker: {{ docker_network_name }}"
+    #       - "=== URLs de acceso ==="
+    #       - "Frontend: http://{{ ansible_host }}:{{ frontend_port }}"
+    #       - "Backend: http://{{ ansible_host }}:{{ backend_port }}"
+    #       - "=== Comandos útiles ==="
+    #       - "Monitorear: {{ base_deploy_path }}/monitor.sh"
+    #       - "Limpiar: {{ base_deploy_path }}/cleanup.sh"
