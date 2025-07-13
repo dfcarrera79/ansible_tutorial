@@ -3,12 +3,14 @@
 - hosts: gcp_server
   become: true
   vars:
+    ansible_user: dfcarrera1979
     nginx_container_name: quasar-nginx
     nginx_volume_path: /home/{{ ansible_user }}/quasar-deploy
+    nginx_config_path: /home/{{ ansible_user }}/nginx.conf
 
   tasks:
 
-    - name: Instalar actualizaciones del sistema (Ubuntu)
+    - name: Actualizar el sistema
       apt:
         upgrade: dist
         update_cache: yes
@@ -21,35 +23,35 @@
           - docker-compose
         state: present
 
-    - name: Habilitar el servicio de Docker al inicio
+    - name: Habilitar Docker al iniciar el sistema
       systemd:
         name: docker
         enabled: yes
 
-    - name: Iniciar el servicio de Docker
+    - name: Iniciar el servicio Docker
       systemd:
         name: docker
         state: started
 
-    - name: Crear directorio para desplegar la app Quasar
-      file:
-        path: "{{ nginx_volume_path }}"
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ ansible_user }}"
-        mode: '0755'
+    - name: Instalar UFW (Uncomplicated Firewall)
+      apt:
+        name: ufw
+        state: present
+        update_cache: yes
 
-    - name: Crear contenedor Nginx para servir el frontend
-      docker_container:
-        name: "{{ nginx_container_name }}"
-        image: nginx:latest
-        state: started
-        restart_policy: always
-        ports:
-          - "80:80"
-        volumes:
-          - "{{ nginx_volume_path }}:/usr/share/nginx/html:ro"
+    - name: Permitir puerto HTTP (80)
+      ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
 
-    - name: Asegurar que el contenedor Nginx se reinicie si cambia el contenido
-      command: docker restart "{{ nginx_container_name }}"
-      when: nginx_container_name is defined
+    - name: Permitir puerto HTTPS (443)
+      ufw:
+        rule: allow
+        port: "443"
+        proto: tcp
+
+    - name: Habilitar UFW si no está activo
+      ufw:
+        state: enabled
+        policy: allow
