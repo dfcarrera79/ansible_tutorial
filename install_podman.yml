@@ -3,35 +3,32 @@
 - hosts: db_servers
   become: true
   vars:
-    ansible_user: ubuntu
-    nginx_container_name: quasar-nginx
-    nginx_volume_path: /home/{{ ansible_user }}/quasar-deploy
-    nginx_config_path: /home/{{ ansible_user }}/nginx.conf
+    ansible_user: loxaservernew
+    frontend_port: 8080
+    backend_port: 8000  
 
   tasks:
-
     - name: Actualizar el sistema
       apt:
         upgrade: dist
         update_cache: yes
       tags: always
 
-    - name: Instalar Docker y Docker Compose
+    - name: Instalar Podman y herramientas relacionadas
       apt:
         name:
-          - docker.io
-          - docker-compose
+          - podman
+          - podman-docker  # Paquete que crea el alias 'docker' -> 'podman'
+          - slirp4netns   # Requerido para rootless Podman
         state: present
 
-    - name: Habilitar Docker al iniciar el sistema
-      systemd:
-        name: docker
-        enabled: yes
-
-    - name: Iniciar el servicio Docker
-      systemd:
-        name: docker
-        state: started
+    - name: Crear alias permanente para docker -> podman (alternativa si podman-docker no funciona)
+      blockinfile:
+        path: /home/{{ ansible_user }}/.bashrc
+        block: |
+          alias docker=podman
+          alias docker-compose=podman-compose
+        marker: "# {mark} ANSIBLE-MANAGED PODMAN ALIAS"
 
     - name: Instalar UFW (Uncomplicated Firewall)
       apt:
@@ -39,37 +36,19 @@
         state: present
         update_cache: yes
 
-    - name: Permitir puerto HTTP (80)
+    - name: Permitir puertos necesarios
       ufw:
         rule: allow
-        port: "80"
+        port: "{{ item }}"
         proto: tcp
+      loop:
+        - "22"    # SSH
+        - "80"    # HTTP
+        - "443"   # HTTPS
+        - "{{ frontend_port }}"
+        - "{{ backend_port }}"
 
-    - name: Permitir puerto HTTPS (443)
-      ufw:
-        rule: allow
-        port: "443"
-        proto: tcp
-
-    - name: Permitir puerto para Frontend (8080)
-      ufw:
-        rule: allow
-        port: "{{ frontend_port }}"
-        proto: tcp
-    
-    - name: Permitir puerto para Backend (8000)
-      ufw:
-        rule: allow
-        port: "{{ backend_port }}"
-        proto: tcp
-
-    - name: Permitir SSH (22)
-      ufw:
-        rule: allow
-        port: "22"
-        proto: tcp
-
-    - name: Habilitar UFW si no está activo
+    - name: Habilitar UFW
       ufw:
         state: enabled
         policy: allow
