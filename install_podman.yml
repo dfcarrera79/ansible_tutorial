@@ -6,6 +6,7 @@
     ansible_user: loxaservernew
     frontend_port: 8080
     backend_port: 8000  
+    cockpit_port: 9090
 
   tasks:
     - name: Actualizar el sistema
@@ -19,7 +20,7 @@
         name:
           - podman
           - podman-docker  # Paquete que crea el alias 'docker' -> 'podman'
-          - slirp4netns   # Requerido para rootless Podman
+          - slirp4netns    # Requerido para rootless Podman
         state: present
 
     - name: Crear alias permanente para docker -> podman (alternativa si podman-docker no funciona)
@@ -29,6 +30,19 @@
           alias docker=podman
           alias docker-compose=podman-compose
         marker: "# {mark} ANSIBLE-MANAGED PODMAN ALIAS"
+
+    - name: Instalar Cockpit y módulo Podman
+      apt:
+        name:
+          - cockpit
+          - cockpit-podman
+        state: present
+
+    - name: Asegurarse de que el servicio cockpit.socket esté habilitado y activo
+      systemd:
+        name: cockpit.socket
+        enabled: yes
+        state: started
 
     - name: Instalar UFW (Uncomplicated Firewall)
       apt:
@@ -42,11 +56,12 @@
         port: "{{ item }}"
         proto: tcp
       loop:
-        - "22"    # SSH
-        - "80"    # HTTP
-        - "443"   # HTTPS
-        - "{{ frontend_port }}"
-        - "{{ backend_port }}"
+        - "22"                 # SSH
+        - "80"                 # HTTP
+        - "443"                # HTTPS
+        - "{{ frontend_port }}" # Frontend
+        - "{{ backend_port }}" # Backend
+        - "{{ cockpit_port }}" # Cockpit
 
     - name: Habilitar UFW
       ufw:
