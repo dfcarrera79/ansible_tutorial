@@ -3,7 +3,7 @@
 - hosts: gcp_server
   become: true
   vars:
-    ansible_user: ubuntu
+    ansible_user: dfcarrera1979
     # Configuración para aplicación RecargasApp
     app_name: recargasapp
     base_deploy_path: /home/{{ ansible_user }}/{{ app_name }}
@@ -15,6 +15,7 @@
     # Puertos
     frontend_port: 8080
     backend_port: 8000
+    cockpit_port: 9090
     # Configuración de red Docker
     docker_network_name: "{{ app_name }}-network"
     
@@ -25,6 +26,19 @@
         update_cache: yes
       tags: always
     
+    - name: Instalar Cockpit y módulo Podman
+      apt:
+        name:
+          - cockpit
+          - cockpit-podman
+        state: present
+
+    - name: Asegurarse de que el servicio cockpit.socket esté habilitado y activo
+      systemd:
+        name: cockpit.socket
+        enabled: yes
+        state: started
+
     - name: Instalar Docker y Docker Compose
       apt:
         name:
@@ -54,35 +68,18 @@
         state: present
         update_cache: yes
     
-    - name: Permitir puerto HTTP (80)
+    - name: Permitir puertos necesarios
       ufw:
         rule: allow
-        port: "80"
+        port: "{{ item }}"
         proto: tcp
-    
-    - name: Permitir puerto HTTPS (443)
-      ufw:
-        rule: allow
-        port: "443"
-        proto: tcp
-    
-    - name: Permitir puerto para Frontend (8080)
-      ufw:
-        rule: allow
-        port: "{{ frontend_port }}"
-        proto: tcp
-    
-    - name: Permitir puerto para Backend (8000)
-      ufw:
-        rule: allow
-        port: "{{ backend_port }}"
-        proto: tcp
-    
-    - name: Permitir SSH (22)
-      ufw:
-        rule: allow
-        port: "22"
-        proto: tcp
+      loop:
+        - "22"                 # SSH
+        - "80"                 # HTTP
+        - "443"                # HTTPS
+        - "{{ frontend_port }}" # Frontend
+        - "{{ backend_port }}" # Backend
+        - "{{ cockpit_port }}" # Cockpit
     
     - name: Habilitar UFW si no está activo
       ufw:
