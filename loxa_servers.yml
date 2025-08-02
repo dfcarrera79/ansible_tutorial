@@ -1,0 +1,160 @@
+---
+
+- hosts: loxa_servers
+  become: true
+  tasks:   
+    - name: Actualizar el sistema
+      apt:
+        upgrade: dist
+        update_cache: yes
+      tags: always
+
+    - name: Instalar Docker y Docker Compose
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+        state: present
+
+    - name: Habilitar Docker al iniciar el sistema
+      systemd:
+        name: docker
+        enabled: yes
+
+    - name: Iniciar el servicio Docker
+      systemd:
+        name: docker
+        state: started
+
+    # - name: Clonar repositorio BillionMail
+    #   git:
+    #     repo: "https://github.com/aaPanel/BillionMail"
+    #     dest: /opt/BillionMail
+    #     version: main
+
+    # - name: Ejecutar instalador de BillionMail
+    #   command: bash install.sh
+    #   args:
+    #     chdir: /opt/BillionMail
+
+    # - name: Verificar si los contenedores de BillionMail están corriendo
+    #   shell: docker-compose ps -q
+    #   args:
+    #     chdir: /opt/BillionMail
+    #   register: billionmail_containers
+    #   ignore_errors: yes
+    #   changed_when: false
+
+    # - name: Clonar repositorio BillionMail
+    #   git:
+    #     repo: "https://github.com/aaPanel/BillionMail"
+    #     dest: /opt/BillionMail
+    #     version: main
+    #     force: yes
+    #   when: billionmail_containers.rc != 0 or billionmail_containers.stdout == ""
+    #   tags: billionmail
+
+    # - name: Ejecutar instalador de BillionMail
+    #   command: bash install.sh
+    #   args:
+    #     chdir: /opt/BillionMail
+    #   when: billionmail_containers.rc != 0 or billionmail_containers.stdout == ""
+    #   register: billionmail_install
+    #   tags: billionmail
+
+    # - name: Mostrar resultado de instalación de BillionMail
+    #   debug:
+    #     var: billionmail_install.stdout_lines
+    #   when: billionmail_install is defined and billionmail_install.stdout_lines is defined
+    #   tags: billionmail
+        
+
+    - name: Instalar Cockpit
+      apt:
+        name:
+          - cockpit
+        state: present      
+
+    # PostgreSQL 16 - Orden corregido de tareas
+    - name: Instalar dependencias necesarias para repositorio PostgreSQL
+      apt:
+        name:
+          - wget
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Crear directorio para keyrings si no existe
+      file:
+        path: /usr/share/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Importar clave GPG del repositorio PostgreSQL
+      shell: |
+        wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg
+      args:
+        creates: /usr/share/keyrings/postgresql.gpg
+
+    - name: Agregar repositorio oficial de PostgreSQL 16
+      apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt {{ ansible_distribution_release }}-pgdg main"
+        filename: "pgdg"
+        state: present
+
+    - name: Actualizar caché después de agregar el repositorio
+      apt:
+        update_cache: yes
+
+    - name: Instalar PostgreSQL 16
+      apt:
+        name: postgresql-16
+        state: present
+
+    - name: Asegurar que el servicio PostgreSQL esté corriendo y habilitado
+      service:
+        name: postgresql
+        state: started
+        enabled: yes  
+
+    # Instalar PgBouncer
+    - name: Instalar PgBouncer
+      apt:
+        name: pgbouncer
+        state: present
+
+    - name: install apache2 and php package for Ubuntu
+      apt: 
+        name: 
+          - apache2
+          - libapache2-mod-php
+          - vim 
+        state: latest
+        update_cache: yes
+
+    - name: Asegurar que el servicio Apache2 esté corriendo y habilitado
+      ansible.builtin.service:
+        name: apache2
+        state: started
+        enabled: yes
+
+    - name: Permitir puertos necesarios con UFW
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"
+        - "80"
+        - "443"
+        - "9595"
+        - "8080"
+        - "80"
+        - "443"
+        - "3000"
+        - "8181"
+
+    - name: Habilitar UFW si no está activo
+      ufw:
+        state: enabled
+        policy: deny    

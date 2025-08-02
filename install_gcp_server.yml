@@ -1,0 +1,144 @@
+# ---
+
+# - hosts: gcp_server
+#   become: true
+#   vars:
+#     # Configuración para aplicación RecargasApp
+#     app_name: recargasapp
+#     # Puertos
+#     frontend_port: 80
+#     # Configuración de red Docker
+#     docker_network_name: "{{ app_name }}-network"
+    
+#   tasks:
+#     - name: Actualizar el sistema
+#       apt:
+#         upgrade: dist
+#         update_cache: yes
+#       tags: always
+
+#     - name: Instalar Docker y Docker Compose
+#       apt:
+#         name:
+#           - docker.io
+#           - docker-compose
+#         state: present
+    
+#     - name: Habilitar Docker al iniciar el sistema
+#       systemd:
+#         name: docker
+#         enabled: yes
+    
+#     - name: Iniciar el servicio Docker
+#       systemd:
+#         name: docker
+#         state: started
+    
+#     - name: Agregar usuario al grupo docker
+#       user:
+#         name: "{{ ansible_user }}"
+#         groups: docker
+#         append: yes
+    
+#     - name: Instalar UFW (Uncomplicated Firewall)
+#       apt:
+#         name: ufw
+#         state: present
+#         update_cache: yes
+    
+#     - name: Permitir puertos necesarios
+#       ufw:
+#         rule: allow
+#         port: "{{ item }}"
+#         proto: tcp
+#         insert: true
+#       loop:
+#         - "22"
+#         - "80"
+#         - "443"
+#         - "{{ frontend_port }}"    
+    
+#     - name: Habilitar UFW si no está activo
+#       ufw:
+#         state: enabled
+#         policy: deny
+    
+---
+- hosts: gcp_server
+  become: true
+  vars:
+    app_name: recargasapp
+    frontend_port: 80
+    docker_network_name: "{{ app_name }}-network"
+
+  tasks:
+    - name: Actualizar el sistema
+      apt:
+        upgrade: dist
+        update_cache: yes
+      tags: always
+
+    - name: Instalar dependencias
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - ufw
+        state: present
+
+    - name: Instalar Docker y Docker Compose desde APT
+      apt:
+        name:
+          - docker.io
+        state: present
+
+    - name: Crear directorio para plugins de Docker CLI
+      file:
+        path: /usr/local/lib/docker/cli-plugins
+        state: directory
+        mode: '0755'
+
+    - name: Instalar plugin docker compose v2
+      get_url:
+        url: https://github.com/docker/compose/releases/download/v2.27.1/docker-compose-linux-x86_64
+        dest: /usr/local/lib/docker/cli-plugins/docker-compose
+        mode: '0755'
+
+    - name: Habilitar Docker al iniciar el sistema
+      systemd:
+        name: docker
+        enabled: yes
+
+    - name: Iniciar el servicio Docker
+      systemd:
+        name: docker
+        state: started
+
+    - name: Agregar usuario al grupo docker
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Permitir puertos necesarios con UFW
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"
+        - "80"
+        - "443"
+        - "{{ frontend_port }}"
+
+    - name: Habilitar UFW si no está activo
+      ufw:
+        state: enabled
+        policy: deny
+
+    - name: Crear red Docker personalizada
+      docker_network:
+        name: "{{ docker_network_name }}"
+        driver: bridge    
