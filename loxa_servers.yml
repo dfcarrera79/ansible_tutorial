@@ -2,7 +2,24 @@
 
 - hosts: loxa_servers
   become: true
-  tasks:   
+  tasks:
+    - name: Desactivar actualizaciones automáticas - detener y deshabilitar servicios
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      loop:
+        - apt-daily.service
+        - apt-daily-upgrade.service
+        - apt-daily.timer
+        - apt-daily-upgrade.timer
+      ignore_errors: yes
+
+    - name: Eliminar paquete unattended-upgrades
+      apt:
+        name: unattended-upgrades
+        state: absent
+
     - name: Actualizar el sistema
       apt:
         upgrade: dist
@@ -26,56 +43,49 @@
         name: docker
         state: started
 
-    # - name: Clonar repositorio BillionMail
-    #   git:
-    #     repo: "https://github.com/aaPanel/BillionMail"
-    #     dest: /opt/BillionMail
-    #     version: main
+    # Instalación condicional de BillionMail
+    - name: Verificar si los contenedores de BillionMail están corriendo
+      shell: docker compose ps -q
+      args:
+        chdir: /opt/BillionMail
+      register: billionmail_containers
+      ignore_errors: yes
+      changed_when: false
 
-    # - name: Ejecutar instalador de BillionMail
-    #   command: bash install.sh
-    #   args:
-    #     chdir: /opt/BillionMail
+    - name: Clonar repositorio BillionMail
+      git:
+        repo: "https://github.com/aaPanel/BillionMail"
+        dest: /opt/BillionMail
+        version: main
+        force: yes
+      when: billionmail_containers.rc != 0 or billionmail_containers.stdout == ""
 
-    # - name: Verificar si los contenedores de BillionMail están corriendo
-    #   shell: docker-compose ps -q
-    #   args:
-    #     chdir: /opt/BillionMail
-    #   register: billionmail_containers
-    #   ignore_errors: yes
-    #   changed_when: false
+    - name: Ejecutar instalador de BillionMail
+      command: bash install.sh
+      args:
+        chdir: /opt/BillionMail
+      when: billionmail_containers.rc != 0 or billionmail_containers.stdout == ""
+      register: billionmail_install
 
-    # - name: Clonar repositorio BillionMail
-    #   git:
-    #     repo: "https://github.com/aaPanel/BillionMail"
-    #     dest: /opt/BillionMail
-    #     version: main
-    #     force: yes
-    #   when: billionmail_containers.rc != 0 or billionmail_containers.stdout == ""
-    #   tags: billionmail
+    - name: Mostrar resultado de instalación de BillionMail
+      debug:
+        var: billionmail_install.stdout_lines
+      when: billionmail_install is defined and billionmail_install.stdout_lines is defined
 
-    # - name: Ejecutar instalador de BillionMail
-    #   command: bash install.sh
-    #   args:
-    #     chdir: /opt/BillionMail
-    #   when: billionmail_containers.rc != 0 or billionmail_containers.stdout == ""
-    #   register: billionmail_install
-    #   tags: billionmail
-
-    # - name: Mostrar resultado de instalación de BillionMail
-    #   debug:
-    #     var: billionmail_install.stdout_lines
-    #   when: billionmail_install is defined and billionmail_install.stdout_lines is defined
-    #   tags: billionmail
-        
-
+    # Cockpit
     - name: Instalar Cockpit
       apt:
         name:
           - cockpit
-        state: present      
+        state: present
 
-    # PostgreSQL 16 - Orden corregido de tareas
+    - name: Habilitar y arrancar Cockpit
+      systemd:
+        name: cockpit.socket
+        enabled: yes
+        state: started  
+
+    # PostgreSQL 16
     - name: Instalar dependencias necesarias para repositorio PostgreSQL
       apt:
         name:
@@ -83,12 +93,6 @@
           - gnupg
           - lsb-release
         state: present
-
-    - name: Crear directorio para keyrings si no existe
-      file:
-        path: /usr/share/keyrings
-        state: directory
-        mode: '0755'
 
     - name: Importar clave GPG del repositorio PostgreSQL
       shell: |
@@ -115,29 +119,55 @@
       service:
         name: postgresql
         state: started
-        enabled: yes  
+        enabled: yes
 
-    # Instalar PgBouncer
+    - name: Instalar python3-psycopg2 para gestión de PostgreSQL
+      apt:
+        name: python3-psycopg2
+        state: present
+
+    - name: Configurar contraseña para usuario postgres
+      postgresql_user:
+        name: postgres
+        password: "s3rv3rc@p2023"
+        login_user: postgres
+        login_password: ""
+      become: yes
+      become_user: postgres
+      ignore_errors: yes
+
+    - name: Crear archivo .pgpass para autenticación automática
+      lineinfile:
+        path: "/var/lib/postgresql/.pgpass"
+        line: "localhost:5432:*:postgres:s3rv3rc@p2023"
+        create: yes
+        owner: postgres
+        group: postgres
+        mode: '0600'
+
+    # PgBouncer
     - name: Instalar PgBouncer
       apt:
         name: pgbouncer
         state: present
 
-    - name: install apache2 and php package for Ubuntu
-      apt: 
-        name: 
+    # Apache y PHP
+    - name: Instalar Apache2 y PHP
+      apt:
+        name:
           - apache2
           - libapache2-mod-php
-          - vim 
+          - vim
         state: latest
         update_cache: yes
 
     - name: Asegurar que el servicio Apache2 esté corriendo y habilitado
-      ansible.builtin.service:
+      service:
         name: apache2
         state: started
         enabled: yes
 
+    # Firewall
     - name: Permitir puertos necesarios con UFW
       ufw:
         rule: allow
@@ -148,13 +178,12 @@
         - "80"
         - "443"
         - "9595"
+        - "9090"
         - "8080"
-        - "80"
-        - "443"
         - "3000"
         - "8181"
 
     - name: Habilitar UFW si no está activo
       ufw:
         state: enabled
-        policy: deny    
+        policy: deny
